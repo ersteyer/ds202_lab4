@@ -1,0 +1,192 @@
+---
+title: "Lab 4"
+author: "Eric Steyer"
+date: "3/18/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(readxl)
+defense <- read_excel('cyclonesFootball2020.xlsx', sheet='Defensive')
+str(defense)
+
+offense <- read_excel('cyclonesFootball2020.xlsx', sheet='Offensive')
+str(offense)
+
+biography <- read_excel('cyclonesFootball2020.xlsx', sheet='Biography')
+str(biography)
+```
+
+## Part One
+
+1.
+
+```{r}
+defense$Name <- as.factor(defense$Name)
+defense$Opponent_Opponent <- as.factor(defense$Opponent_Opponent)
+offense$Name <- as.factor(offense$Name)
+offense$Opponent_Opponent <- as.factor(offense$Opponent_Opponent)
+biography$Name <- as.factor(biography$Name)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+offense <- offense %>% separate(`Passing_CMP-ATT`, c("Pass_comp","Pass_att")) %>% mutate(Comp_Pct = as.numeric(Pass_comp) / as.numeric(Pass_att))
+```
+
+```{r}
+head(offense)
+head(defense)
+head(biography)
+```
+
+
+2.
+
+```{r}
+defClean <- defense %>% mutate(across(3:11, as.numeric))
+offClean <- offense %>% mutate(across(3:14, as.numeric))
+biography <- biography %>% mutate(Weight=as.numeric(Weight))
+
+head(defClean)
+head(offClean)
+```
+
+3.
+
+```{r}
+bioClean <- biography %>% separate(Height, c("feet","inches"), sep='-') %>% mutate(Height = as.numeric(feet)*12 + as.numeric(inches)) %>% select(-feet:-inches)
+
+head(bioClean)
+```
+
+
+## Part Two
+
+1.
+
+```{r}
+offClean <- offClean %>% pivot_longer(c(3:14),names_to = "stat")
+
+head(offClean)
+```
+
+2.
+
+```{r}
+library(ggplot2)
+
+offClean %>% ggplot(aes(value)) + geom_histogram(bins = 10) + facet_wrap(~stat, scales = "free")
+```
+
+Almost all of the distributions seem like they have a higher amount of smaller values, and as the value for each stat increases, they become less common. The distributions for TD stats appear to be more discrete with smaller values, since they are harder to get.
+
+3.
+
+```{r}
+OU_recyds = offClean %>% filter(Opponent_Opponent == "Oklahoma" & stat == "Receiving_YDS") %>% group_by(Name) %>% summarize(Oklahoma_recyds = mean(value))
+
+Ore_recyds = offClean %>% filter(Opponent_Opponent == "Oregon" & stat == "Receiving_YDS") %>% mutate(Oregon_recyds = value)
+
+recyd_compare = full_join(OU_recyds, Ore_recyds, by = "Name") %>% select(c("Name", "Oklahoma_recyds", "Oregon_recyds"))
+
+recyd_compare %>% ggplot(aes(x=Oklahoma_recyds, y=Oregon_recyds)) + geom_point() + geom_abline(intercept = 0, slope = 1)
+```
+
+This scatterplot shows that every player averaged at least as many yards over the two Oklahoma games as they had in the Oregon game, if not more. This would indicate that ISU had better offense against Oklahoma than they did against Oregon.
+
+4.
+
+```{r}
+bioClean = bioClean %>% separate(Hometown, c("City", "State"), sep = ", ")
+
+bioClean[1:5, c("City", "State")]
+```
+
+5.
+
+```{r}
+bioClean %>% group_by(State) %>% summarise(n = n())
+```
+
+## Part Three
+
+1.
+
+```{r}
+bioClean %>% group_by(State) %>% summarise(n = n()) %>% arrange(desc(n))
+```
+```{r}
+bioClean %>% group_by(State) %>% summarise(n = n()) %>% ggplot(aes(x= State, y=n)) + geom_bar(stat="identity")
+```
+
+
+2.
+
+```{r}
+Purdy = offense %>% filter(Name == "Purdy, Brock") %>% select(c("Name", "Opponent_Opponent", "Passing_YDS", "Passing_TD")) %>% mutate(Result = c("L", "W", "W", "W", "L", "W", "W", "W", "W", "W", "L", "W"))
+
+ggplot(Purdy, aes(x=Passing_YDS, y=Passing_TD)) + geom_point(aes(color=Purdy$Result))
+
+```
+
+Here I went and added the result of the game to Purdy's stats. I used his passing yards and passing touchdowns. We can see from the graph that if he throws at least two touchdowns, the team won every game. Two of the three fewest passing yards games resulted in losses. Interestingly, the team also lost the game where he threw for the most yards.  Further analysis would show that he threw 3 interceptions in that game. So it is safe to say that the team played better when he played better.
+
+3.
+
+```{r}
+defense19 <- read_excel('cyclonesFootball2019.xlsx', sheet='Defensive')
+str(defense)
+
+offense19 <- read_excel('cyclonesFootball2019.xlsx', sheet='Offensive')
+```
+
+```{r}
+defClean19 <-  defense19 %>% mutate(across(3:11, as.numeric))
+
+defClean19$Total_Tackles = defClean19$Tackles_Solo + defClean19$Tackles_ASST
+
+defClean$Total_Tackles = defClean$Tackles_Solo + defClean$Tackles_ASST
+```
+
+```{r}
+tackles20 = defClean %>% group_by(Name) %>% summarise(tackles = sum(Total_Tackles)) %>% rename(tkl20 = tackles)
+
+tackles19 = defClean19 %>% group_by(Name) %>% summarise(tackles = sum(Total_Tackles)) %>% rename(tkl19 = tackles)
+```
+
+
+```{r}
+inner_join(tackles20, tackles19, by = "Name") %>% mutate(tkl_diff = tkl20 - tkl19) %>% arrange(desc(tkl_diff))
+
+
+```
+
+On defense, I looked at who improved most in number of tackles for the season, and Jake Hummel had the largest increase, going from 36 to 77.
+
+```{r}
+offClean19 <- offense19 %>% mutate(across(3:12, as.numeric))
+```
+```{r}
+off20 = offense %>% mutate(across(3:14, as.numeric)) %>% select(c("Name", "Receiving_YDS", "Rushing_YDS")) %>% group_by(Name) %>% summarise(tot_rush20 = sum(Rushing_YDS), tot_rec20 = sum(Receiving_YDS))
+```
+
+```{r}
+off19 = offClean19  %>% select(c("Name", "Receiving_YDS", "Rushing_YDS")) %>% group_by(Name) %>% summarise(tot_rush19 = sum(Rushing_YDS), tot_rec19 = sum(Receiving_YDS))
+```
+
+```{r}
+off_diff = inner_join(off20, off19, by = "Name") %>% mutate(rush_diff = tot_rush20 - tot_rush19, rec_diff = tot_rec20 - tot_rec19)
+
+off_diff %>% arrange(desc(rush_diff)) %>% select(c("Name", "rush_diff"))
+off_diff %>% arrange(desc(rec_diff)) %>% select(c("Name", "rec_diff"))
+```
+
+For offense, I looked at who gained the most yards year over year for both rushing and receiving. Breece Hall appears to be the most improved rusher, gaining 675 more yards in 2020 than 2019. Landon Akers appears to be the most improved receiver, gaining 160 more yards in 2020 than in 2019.
